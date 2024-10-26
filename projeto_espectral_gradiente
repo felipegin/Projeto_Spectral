@@ -1,0 +1,88 @@
+# Rodar só na primeira vez
+import Pkg; Pkg.add("Plots")
+import Pkg; Pkg.add("Interact")
+import Pkg; Pkg.add("ForwardDiff")
+
+# Iniciar o ambiente
+using Pkg
+pkg"activate ."
+pkg"instantiate"
+
+# Chamando as bibliotecas necessárias e iniciando o grid
+using Plots, Interact, LinearAlgebra, ForwardDiff
+gr(size=(600,400))
+
+
+# Definindo a função
+f(x) = (x[1]-1)^2 + 4*(x[2]-x[1]^2)^2
+
+# Aqui eu coloco o domínio do grid
+xg = -2:0.1:2
+yg = -3:0.1:3
+
+# Criando o gráfico
+contour(xg, yg, (x,y) -> f([x,y]), levels=100)
+
+# Aqui vou definir as condições iniciais do problema:
+
+# Gradiente da f(x)
+∇f(x)=ForwardDiff.gradient(f,x)
+
+# Ponto de partida
+x=[-1.0;0.0]
+
+# Direção do passo
+d=-∇f(x)
+
+# Tamanho inicial do passo
+α=1
+
+# Ajuste do tamanho do passo em 90%
+c=0.9
+
+# Calculando ||f(x)||²
+norma_grad_2 = sum(-d .^2)
+
+# Passo da iteração
+t=0
+
+# Encontrando o tamanho do passo com a busca de Armijo
+while (f(x+α*d) > f(x)-c*α*d'*d)
+    println("------- Iteração ",t," -------")
+    println("Tamanho do passo inicial: ",α)
+    α = α*c
+    println("Tamanho do passo inicial: ",α)
+    t=t+1
+end
+
+f(x+α*d)
+
+
+# Ponto inicial 
+x=[-1.0;0.0]
+∇f(x)=ForwardDiff.gradient(f,x)
+α=1
+
+while (norm(∇f(x)) > 0.001)
+    
+    d=-∇f(x)
+
+    α=1
+    c=0.9
+    t=0
+
+    while (f(x+α*d) > f(x)-c*α*d'*d)
+        println("------- Iteração ",t," -------")
+        println("Tamanho do passo inicial: ",α)
+        α = α*c
+        println("Tamanho do passo inicial: ",α)
+        t=t+1
+    end
+
+    x=x+α*d
+    ∇f(x)=ForwardDiff.gradient(f,x)
+
+    println("x: ",x)
+    println("f(x): ",f(x))
+
+end
