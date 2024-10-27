@@ -1,6 +1,8 @@
+# Ativando ambiente
 import Pkg
 Pkg.activate("C:/Users/93dav/programacao_nao_linear")
 
+# Importando libs que serão utilizadas
 import Pkg; Pkg.add("Optim")
 import Pkg; Pkg.add("CUTEst")
 import Pkg; Pkg.add("NLPModels")
@@ -10,82 +12,65 @@ import Pkg; Pkg.add("DataFrames")
 using Optim, CUTEst, NLPModels, LinearAlgebra, DataFrames
 
 # Métricas de desempenho
-mutable struct metricas
+mutable struct metrics
+    function_value::Float64
+    gradient_norm_value::Float64
     function_count::Int
     gradient_count::Int
 end
 
-#================================================================================================================
-# Função
-- `add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)`
-
-# Objetivo
-- Adicionar resultado em um df já criado.
-
-# Saída
-- Ele modifica o df e não retorna nada.
-
-# Entradas
-- `df`              : DataFrame que será modificado. No formato:
-                    df = DataFrame(Problem = String[], f_Cauchy = Float64[], grad_Cauchy = Float64[],
-                    f_BFGS = Float64[], grad_BFGS = Float64[], f_Spectral = Float64[], grad_Spectral = Float64[])
-
-- `problem`         : nome do problema, sugestão enviar nlp.meta.name
-- `f_cauchy`        : contagem de avaliações da função no método de Cauchy.
-- `f_bfgs`          : contagem de avaliações da função no método de BFGS.
-- `f_spectral`      : contagem de avaliações da função no método Espectral.
-- `grad_cauchy`     : contagem de avaliações do gradiente no método de Cauchy.
-- `grad_bfgs`       : contagem de avaliações do gradiente no método BFGS.
-- `grad_spectral`   : contagem de avaliações do gradiente no método Espectral.
-=================================================================================================================#
-
-function add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)
-    push!(df, (
-        Problem = problem,
-        f_Cauchy = f_cauchy, grad_Cauchy = grad_cauchy,
-        f_BFGS = f_bfgs, grad_BFGS = grad_bfgs,
-        f_Spectral = f_spectral, grad_Spectral = grad_spectral
-    ))
-end
+# Criando DataFrame para armazenar os resultados
+results_df = DataFrame(
+    Problem = String[], 
+    f_Cauchy = Float64[], grad_Cauchy = Float64[], f_count_Cauchy = Int[], grad_count_Cauchy = Int[],
+    f_BFGS = Float64[], grad_BFGS = Float64[], f_count_BFGS = Int[], grad_count_BFGS = Int[],
+    f_Spectral = Float64[], grad_Spectral = Float64[], f_count_Spectral = Int[], grad_count_Spectral = Int[]
+)
 
 #================================================================================================================
 # Função
-- `add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)`
+    `Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)`
 
 # Objetivo
-- Adicionar resultado em um df já criado.
+    Aplicar o algoritmo do método do gradiente com busca clássica de Armijo
 
 # Saída
-- Ele modifica o df e não retorna nada.
+    - Print das iterações com os valores da função e do gradiente
+    - Ajusta o valor da estrutura count para anotar:
+        1. Valor da função no ponto final
+        2. Norma do gradiente no ponto final
+        3. Quantidade de vezes que a função foi avaliada
+        4. Quantidade de vezes que o gradiente foi avaliado
 
 # Entradas
-- `df`              : DataFrame que será modificado. No formato:
-                    df = DataFrame(Problem = String[], f_Cauchy = Float64[], grad_Cauchy = Float64[],
-                    f_BFGS = Float64[], grad_BFGS = Float64[], f_Spectral = Float64[], grad_Spectral = Float64[])
-
-- `problem`         : nome do problema, sugestão enviar nlp.meta.name
-- `f_cauchy`        : contagem de avaliações da função no método de Cauchy.
-- `f_bfgs`          : contagem de avaliações da função no método de BFGS.
-- `f_spectral`      : contagem de avaliações da função no método Espectral.
-- `grad_cauchy`     : contagem de avaliações do gradiente no método de Cauchy.
-- `grad_bfgs`       : contagem de avaliações do gradiente no método BFGS.
-- `grad_spectral`   : contagem de avaliações do gradiente no método Espectral.
+    - `nlp`             : problema teste importado pela função CUTEstModel() 
+    - `x`               : x inicial da busca. Sugestão: puxar o que está na variável nlp.meta.x0
+    - `d`               : gradiente da função no ponto inicial. Sugestão: -grad(nlp,x). A variável d foi usada para economizar 1 cálulo do gradiente por iteração.
+    - `passo_inicial`   : passo inicial da busca de Armijo. Sugesão: 1, 0.5 ou 0.1
+    - `fator_reducao`   : fator de redução do passo a cada teste da Busca de Armijo. Número entre 0 e 1. Sugestão: 0.5
+    - `cont`            : estrutura que acumula as métricas do problema
+    - `criterio_parada` : a partir de qual valor da norma do gradiente o algoritmo pode parar
 =================================================================================================================#
 
-function Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)
-    i=0
+function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada)
+    i=0 
     while (norm(d) > criterio_parada)
     
+        # Definindo o gradiente
         d=-grad(nlp, x)
-        cont.gradient_count += 1
+        count.gradient_count += 1
+
+        # Critérios iniciais da Busca de Armijo
         α= passo_inicial
         c= fator_reducao
     
+        # Busca de Armijo
         while (obj(nlp, x+α*d) > obj(nlp, x)-c*α*d'*d)
-            cont.function_count += 2
+            count.function_count += 2
             α = α*c
         end
     
+        # Atualização do ponto com a direção e o passo calculados
         x=x+α*d
     
         i=i+1
@@ -94,35 +79,50 @@ function Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)
         println("|grad_f(x)| = ", norm(d))
     
     end
+
+    # Atualiando as métricas
+    count.function_value = obj(nlp, x)
+    count.gradient_norm_value = norm(d)
 end
 
 
 # Carregar um problema de teste CUTEst
 nlp = CUTEstModel("HILBERTB"; decode=true)
 
-cont = metricas(0,0)
+# Inicializar as métricas com zeros
+count = metrics(0,0,0,0)
 
-Cauchy(nlp, nlp.meta.x0, -grad(nlp,x), 0.1, 0.5, cont, 0.0001)
+d = -grad(nlp,x)
+count.gradient_count = 1
 
+# Função de Cauchy
+Cauchy(nlp, nlp.meta.x0, d, 0.1, 0.5, count, 0.0001)
 
+# Armazenando métricas no DataFrame
+push!(results_df, (
+        # Nome do problema
+        Problem = nlp.meta.name,
 
+        # Dados de Cauchy
+        f_Cauchy = count.function_value,
+        grad_Cauchy = count.gradient_norm_value,
+        f_count_Cauchy = count.function_count,
+        grad_count_Cauchy = count.gradient_count,
 
-# Registrar resultados
-results_df = DataFrame(
-    Problem = String[], 
-    f_Cauchy = Float64[], grad_Cauchy = Float64[],
-    f_BFGS = Float64[], grad_BFGS = Float64[],
-    f_Spectral = Float64[], grad_Spectral = Float64[]
-)
+        # Dados da BFGS
+        f_BFGS = 0,
+        grad_BFGS = 0,
+        f_count_BFGS = 0,
+        grad_count_BFGS = 0,
 
-
-add_result!(results_df, nlp.meta.name, cont.function_count, cont.gradient_count, 0, 0, 0, 0)
+        # Dados do Spectral
+        f_Spectral = 0,
+        grad_Spectral = 0,
+        f_count_Spectral = 0,
+        grad_count_Spectral = 0
+    ))
 
 
 println(results_df)
-
-#using CSV
-#CSV.write("results.csv", results_df)
-
 
 finalize(nlp)
