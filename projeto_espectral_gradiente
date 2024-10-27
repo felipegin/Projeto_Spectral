@@ -1,48 +1,171 @@
-# Iniciar o ambiente
-using Pkg
-pkg"activate ."
-pkg"instantiate"
+# Ativando ambiente
+import Pkg
+Pkg.activate("C:/Users/93dav/programacao_nao_linear")
 
-# Chamando as bibliotecas necessárias e iniciando o grid
-using Plots, Interact, LinearAlgebra, ForwardDiff
-gr(size=(600,400))
+# Importando libs que serão utilizadas
+import Pkg; Pkg.add("Optim")
+import Pkg; Pkg.add("CUTEst")
+import Pkg; Pkg.add("NLPModels")
+import Pkg; Pkg.add("LinearAlgebra")
+import Pkg; Pkg.add("DataFrames")
 
-# Definindo a função
-f(x) = (x[1]-1)^2 + 4*(x[2]-x[1]^2)^2
+using Optim, CUTEst, NLPModels, LinearAlgebra, DataFrames
 
-# Aqui eu coloco o domínio do grid
-xg = -2:0.1:2
-yg = -3:0.1:3
+# Métricas de desempenho
+mutable struct metrics
+    function_value::Float64
+    gradient_norm_value::Float64
+    function_count::Int
+    gradient_count::Int
+end
 
-# Criando o gráfico
-contour(xg, yg, (x,y) -> f([x,y]), levels=100)
+# Criando DataFrame para armazenar os resultados
+results_df = DataFrame(
+    Problem = String[], 
+    f_Cauchy = Float64[], grad_Cauchy = Float64[], f_count_Cauchy = Int[], grad_count_Cauchy = Int[],
+    f_BFGS = Float64[], grad_BFGS = Float64[], f_count_BFGS = Int[], grad_count_BFGS = Int[],
+    f_Spectral = Float64[], grad_Spectral = Float64[], f_count_Spectral = Int[], grad_count_Spectral = Int[]
+)
 
+#================================================================================================================
+# Função
+    `Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)`
 
-# Ponto inicial 
-x=[-1.0;0.0]
-∇f(x)=ForwardDiff.gradient(f,x)
-α=1
+# Objetivo
+    Aplicar o algoritmo do método do gradiente com busca clássica de Armijo
 
-while (norm(∇f(x)) > 0.001)
+# Saída
+    - Print das iterações com os valores da função e do gradiente
+    - Ajusta o valor da estrutura count para anotar:
+        1. Valor da função no ponto final
+        2. Norma do gradiente no ponto final
+        3. Quantidade de vezes que a função foi avaliada
+        4. Quantidade de vezes que o gradiente foi avaliado
+
+# Entradas
+    - `nlp`             : problema teste importado pela função CUTEstModel() 
+    - `x`               : x inicial da busca. Sugestão: puxar o que está na variável nlp.meta.x0
+    - `d`               : gradiente da função no ponto inicial. Sugestão: -grad(nlp,x). A variável d foi usada para economizar 1 cálulo do gradiente por iteração.
+    - `passo_inicial`   : passo inicial da busca de Armijo. Sugesão: 1, 0.5 ou 0.1
+    - `fator_reducao`   : fator de redução do passo a cada teste da Busca de Armijo. Número entre 0 e 1. Sugestão: 0.5
+    - `cont`            : estrutura que acumula as métricas do problema
+    - `criterio_parada` : a partir de qual valor da norma do gradiente o algoritmo pode parar
+=================================================================================================================#
+
+function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada_grad, criterio_parada_i)
+    i=0 
+    while (norm(d) > criterio_parada_grad) && (i < criterio_parada_i)
     
-    d=-∇f(x)
+        # Definindo o gradiente
+        d=-grad(nlp, x)
+        count.gradient_count += 1
 
-    α=1
-    c=0.9
-    t=0
-
-    while (f(x+α*d) > f(x)-c*α*d'*d)
-        println("------- Iteração ",t," -------")
-        println("Tamanho do passo inicial: ",α)
-        α = α*c
-        println("Tamanho do passo inicial: ",α)
-        t=t+1
+        # Critérios iniciais da Busca de Armijo
+        α= passo_inicial
+        c= fator_reducao
+        
+        count.function_count += 2
+        # Busca de Armijo
+        while (obj(nlp, x+α*d) > obj(nlp, x)-c*α*d'*d)
+            count.function_count += 2
+            α = α*c
+        end
+    
+        # Atualização do ponto com a direção e o passo calculados
+        x=x+α*d
+    
+        i=i+1
+        println("--------- Iteração: ",i," ---------")
+        println("f(x) = ",obj(nlp, x))
+        println("|grad_f(x)| = ", norm(d))
+    
     end
 
-    x=x+α*d
-    ∇f(x)=ForwardDiff.gradient(f,x)
-
-    println("x: ",x)
-    println("f(x): ",f(x))
-
+    # Atualiando as métricas
+    count.function_value = obj(nlp, x)
+    count.gradient_norm_value = norm(d)
 end
+
+
+
+tests = [
+    "ARGLINA",
+    "ARGLINB",
+    "BA-L1SPLS",
+    "BIGGS6",
+    "BROWNAL",
+    "COATING",
+    "FLETCHCR",
+    "GAUSS2LS",
+    "GENROSE",
+    "HAHN1LS",
+    "HEART6LS",
+    "HILBERTB",
+    "HYDCAR6LS",
+    "LANCZOS1LS",
+    "LANCZOS2LS",
+    "LRIJCNN1",
+    "LUKSAN12LS",
+    "LUKSAN16LS",
+    "OSBORNEA",
+    "PALMER1C",
+    "PALMER3C",
+    "PENALTY2",
+    "PENALTY3",
+    "QING",
+    "ROSENBR",
+    "STRTCHDV",
+    "TESTQUAD",
+    "THURBERLS",
+    "TRIGON1",
+    "TOINTGOR",
+]
+
+for test in tests
+    nlp = CUTEstModel(test; decode=true)
+    println(test," importado!")
+
+    # Inicializar as métricas com zeros
+    count = metrics(0,0,0,0)
+
+    d = -grad(nlp,nlp.meta.x0)
+    count.gradient_count = 1
+
+    println("Começando Cauchy com ", test)
+    Cauchy(nlp, nlp.meta.x0, d, 0.1, 0.5, count, 0.0001, 100)
+
+    # Armazenando métricas no DataFrame
+    println("Armazenando métricas")
+    push!(results_df, (
+        # Nome do problema
+        Problem = nlp.meta.name,
+
+        # Dados de Cauchy
+        f_Cauchy = count.function_value,
+        grad_Cauchy = count.gradient_norm_value,
+        f_count_Cauchy = count.function_count,
+        grad_count_Cauchy = count.gradient_count,
+
+        # Dados da BFGS
+        f_BFGS = 0,
+        grad_BFGS = 0,
+        f_count_BFGS = 0,
+        grad_count_BFGS = 0,
+
+        # Dados do Spectral
+        f_Spectral = 0,
+        grad_Spectral = 0,
+        f_count_Spectral = 0,
+        grad_count_Spectral = 0
+    ))
+
+    finalize(nlp)
+    println(test," finalizado!")
+end
+
+println(results_df)
+
+Pkg.add("CSV")
+using CSV
+
+CSV.write("C:/Users/93dav/OneDrive/Documentos/Felipe/resultados_projeto_espectral/results_df.csv", results_df)
