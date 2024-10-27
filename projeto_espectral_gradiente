@@ -9,7 +9,7 @@ import Pkg; Pkg.add("LinearAlgebra")
 using Optim, CUTEst, NLPModels, LinearAlgebra
 
 # Carregar um problema de teste CUTEst
-nlp = CUTEstModel("BA-L1SPLS"; decode=true)
+nlp = CUTEstModel("HILBERTB"; decode=true)
 
 # Definir a função objetivo e gradiente para o problema
 f_obj = x -> obj(nlp, x)
@@ -19,13 +19,26 @@ grad_obj = x -> grad(nlp, x)
 x = nlp.meta.x0
 i=0
 
-while (norm(grad_obj(x)) > 0.001)
+# Métricas de desempenho
+mutable struct metricas
+    function_count::Int
+    gradient_count::Int
+end
+
+cont = metricas(0,0)
+
+d=-grad_obj(x)
+cont.gradient_count += 1
+
+while (norm(d) > 0.001)
     
     d=-grad_obj(x)
+    cont.gradient_count += 1
     α=0.1
     c=0.5
 
     while (f_obj(x+α*d) > f_obj(x)-c*α*d'*d)
+        cont.function_count += 2
         α = α*c
     end
 
@@ -43,5 +56,37 @@ end
 println("Número de iterações: ",i)
 println("Ponto final: x = ",x)
 println("Valor funcional no ponto: f(x) = ",f_obj(x))
+println(cont)
+
+# Registrar resultados
+import Pkg; Pkg.add("DataFrames")
+using DataFrames
+
+results_df = DataFrame(
+    Problem = String[], 
+    f_Cauchy = Float64[], grad_Cauchy = Float64[],
+    f_BFGS = Float64[], grad_BFGS = Float64[],
+    f_Spectral = Float64[], grad_Spectral = Float64[]
+)
+
+
+function add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)
+    push!(df, (
+        Problem = problem,
+        f_Cauchy = f_cauchy, grad_Cauchy = grad_cauchy,
+        f_BFGS = f_bfgs, grad_BFGS = grad_bfgs,
+        f_Spectral = f_spectral, grad_Spectral = grad_spectral
+    ))
+end
+
+
+add_result!(results_df, nlp.meta.name, cont.function_count, cont.gradient_count, 0, 0, 0, 0)
+
+
+println(results_df)
+
+#using CSV
+#CSV.write("results.csv", results_df)
+
 
 finalize(nlp)
