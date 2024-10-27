@@ -87,6 +87,7 @@ function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada_
 end
 
 
+
 tests = [
     "ARGLINA",
     "ARGLINB",
