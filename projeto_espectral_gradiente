@@ -52,9 +52,9 @@ results_df = DataFrame(
     - `criterio_parada` : a partir de qual valor da norma do gradiente o algoritmo pode parar
 =================================================================================================================#
 
-function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada)
+function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada_grad, criterio_parada_i)
     i=0 
-    while (norm(d) > criterio_parada)
+    while (norm(d) > criterio_parada_grad) && (i < criterio_parada_i)
     
         # Definindo o gradiente
         d=-grad(nlp, x)
@@ -63,7 +63,8 @@ function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada)
         # Critérios iniciais da Busca de Armijo
         α= passo_inicial
         c= fator_reducao
-    
+        
+        count.function_count += 2
         # Busca de Armijo
         while (obj(nlp, x+α*d) > obj(nlp, x)-c*α*d'*d)
             count.function_count += 2
@@ -86,20 +87,55 @@ function Cauchy(nlp, x, d, passo_inicial, fator_reducao, count, criterio_parada)
 end
 
 
-# Carregar um problema de teste CUTEst
-nlp = CUTEstModel("HILBERTB"; decode=true)
+tests = [
+    "ARGLINA",
+    "ARGLINB",
+    "BA-L1SPLS",
+    "BIGGS6",
+    "BROWNAL",
+    "COATING",
+    "FLETCHCR",
+    "GAUSS2LS",
+    "GENROSE",
+    "HAHN1LS",
+    "HEART6LS",
+    "HILBERTB",
+    "HYDCAR6LS",
+    "LANCZOS1LS",
+    "LANCZOS2LS",
+    "LRIJCNN1",
+    "LUKSAN12LS",
+    "LUKSAN16LS",
+    "OSBORNEA",
+    "PALMER1C",
+    "PALMER3C",
+    "PENALTY2",
+    "PENALTY3",
+    "QING",
+    "ROSENBR",
+    "STRTCHDV",
+    "TESTQUAD",
+    "THURBERLS",
+    "TRIGON1",
+    "TOINTGOR",
+]
 
-# Inicializar as métricas com zeros
-count = metrics(0,0,0,0)
+for test in tests
+    nlp = CUTEstModel(test; decode=true)
+    println(test," importado!")
 
-d = -grad(nlp,x)
-count.gradient_count = 1
+    # Inicializar as métricas com zeros
+    count = metrics(0,0,0,0)
 
-# Função de Cauchy
-Cauchy(nlp, nlp.meta.x0, d, 0.1, 0.5, count, 0.0001)
+    d = -grad(nlp,nlp.meta.x0)
+    count.gradient_count = 1
 
-# Armazenando métricas no DataFrame
-push!(results_df, (
+    println("Começando Cauchy com ", test)
+    Cauchy(nlp, nlp.meta.x0, d, 0.1, 0.5, count, 0.0001, 100)
+
+    # Armazenando métricas no DataFrame
+    println("Armazenando métricas")
+    push!(results_df, (
         # Nome do problema
         Problem = nlp.meta.name,
 
@@ -122,7 +158,13 @@ push!(results_df, (
         grad_count_Spectral = 0
     ))
 
+    finalize(nlp)
+    println(test," finalizado!")
+end
 
 println(results_df)
 
-finalize(nlp)
+Pkg.add("CSV")
+using CSV
+
+CSV.write("C:/Users/93dav/OneDrive/Documentos/Felipe/resultados_projeto_espectral/results_df.csv", results_df)
