@@ -5,19 +5,9 @@ import Pkg; Pkg.add("Optim")
 import Pkg; Pkg.add("CUTEst")
 import Pkg; Pkg.add("NLPModels")
 import Pkg; Pkg.add("LinearAlgebra")
+import Pkg; Pkg.add("DataFrames")
 
-using Optim, CUTEst, NLPModels, LinearAlgebra
-
-# Carregar um problema de teste CUTEst
-nlp = CUTEstModel("HILBERTB"; decode=true)
-
-# Definir a função objetivo e gradiente para o problema
-f_obj = x -> obj(nlp, x)
-grad_obj = x -> grad(nlp, x)
-
-# Ponto inicial 
-x = nlp.meta.x0
-i=0
+using Optim, CUTEst, NLPModels, LinearAlgebra, DataFrames
 
 # Métricas de desempenho
 mutable struct metricas
@@ -25,50 +15,29 @@ mutable struct metricas
     gradient_count::Int
 end
 
-cont = metricas(0,0)
+#================================================================================================================
+# Função
+- `add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)`
 
-d=-grad_obj(x)
-cont.gradient_count += 1
+# Objetivo
+- Adicionar resultado em um df já criado.
 
-while (norm(d) > 0.001)
-    
-    d=-grad_obj(x)
-    cont.gradient_count += 1
-    α=0.1
-    c=0.5
+# Saída
+- Ele modifica o df e não retorna nada.
 
-    while (f_obj(x+α*d) > f_obj(x)-c*α*d'*d)
-        cont.function_count += 2
-        α = α*c
-    end
+# Entradas
+- `df`              : DataFrame que será modificado. No formato:
+                    df = DataFrame(Problem = String[], f_Cauchy = Float64[], grad_Cauchy = Float64[],
+                    f_BFGS = Float64[], grad_BFGS = Float64[], f_Spectral = Float64[], grad_Spectral = Float64[])
 
-    x=x+α*d
-
-    i=i+1
-    println("--------- Iteração: ",i," ---------")
-    #println("Ponto: x = ",x)
-    println("Valor funcional no ponto: f(x) = ",f_obj(x))
-    println("Norma do gradiente: ", norm(grad_obj(x)))
-
-
-end
-
-println("Número de iterações: ",i)
-println("Ponto final: x = ",x)
-println("Valor funcional no ponto: f(x) = ",f_obj(x))
-println(cont)
-
-# Registrar resultados
-import Pkg; Pkg.add("DataFrames")
-using DataFrames
-
-results_df = DataFrame(
-    Problem = String[], 
-    f_Cauchy = Float64[], grad_Cauchy = Float64[],
-    f_BFGS = Float64[], grad_BFGS = Float64[],
-    f_Spectral = Float64[], grad_Spectral = Float64[]
-)
-
+- `problem`         : nome do problema, sugestão enviar nlp.meta.name
+- `f_cauchy`        : contagem de avaliações da função no método de Cauchy.
+- `f_bfgs`          : contagem de avaliações da função no método de BFGS.
+- `f_spectral`      : contagem de avaliações da função no método Espectral.
+- `grad_cauchy`     : contagem de avaliações do gradiente no método de Cauchy.
+- `grad_bfgs`       : contagem de avaliações do gradiente no método BFGS.
+- `grad_spectral`   : contagem de avaliações do gradiente no método Espectral.
+=================================================================================================================#
 
 function add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)
     push!(df, (
@@ -78,6 +47,73 @@ function add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_sp
         f_Spectral = f_spectral, grad_Spectral = grad_spectral
     ))
 end
+
+#================================================================================================================
+# Função
+- `add_result!(df, problem, f_cauchy, grad_cauchy, f_bfgs, grad_bfgs, f_spectral, grad_spectral)`
+
+# Objetivo
+- Adicionar resultado em um df já criado.
+
+# Saída
+- Ele modifica o df e não retorna nada.
+
+# Entradas
+- `df`              : DataFrame que será modificado. No formato:
+                    df = DataFrame(Problem = String[], f_Cauchy = Float64[], grad_Cauchy = Float64[],
+                    f_BFGS = Float64[], grad_BFGS = Float64[], f_Spectral = Float64[], grad_Spectral = Float64[])
+
+- `problem`         : nome do problema, sugestão enviar nlp.meta.name
+- `f_cauchy`        : contagem de avaliações da função no método de Cauchy.
+- `f_bfgs`          : contagem de avaliações da função no método de BFGS.
+- `f_spectral`      : contagem de avaliações da função no método Espectral.
+- `grad_cauchy`     : contagem de avaliações do gradiente no método de Cauchy.
+- `grad_bfgs`       : contagem de avaliações do gradiente no método BFGS.
+- `grad_spectral`   : contagem de avaliações do gradiente no método Espectral.
+=================================================================================================================#
+
+function Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)
+    i=0
+    while (norm(d) > criterio_parada)
+    
+        d=-grad(nlp, x)
+        cont.gradient_count += 1
+        α= passo_inicial
+        c= fator_reducao
+    
+        while (obj(nlp, x+α*d) > obj(nlp, x)-c*α*d'*d)
+            cont.function_count += 2
+            α = α*c
+        end
+    
+        x=x+α*d
+    
+        i=i+1
+        println("--------- Iteração: ",i," ---------")
+        println("f(x) = ",obj(nlp, x))
+        println("|grad_f(x)| = ", norm(d))
+    
+    end
+end
+
+
+# Carregar um problema de teste CUTEst
+nlp = CUTEstModel("HILBERTB"; decode=true)
+
+cont = metricas(0,0)
+
+Cauchy(nlp, nlp.meta.x0, -grad(nlp,x), 0.1, 0.5, cont, 0.0001)
+
+
+
+
+# Registrar resultados
+results_df = DataFrame(
+    Problem = String[], 
+    f_Cauchy = Float64[], grad_Cauchy = Float64[],
+    f_BFGS = Float64[], grad_BFGS = Float64[],
+    f_Spectral = Float64[], grad_Spectral = Float64[]
+)
 
 
 add_result!(results_df, nlp.meta.name, cont.function_count, cont.gradient_count, 0, 0, 0, 0)
