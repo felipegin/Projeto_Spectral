@@ -1,0 +1,183 @@
+# Ativando ambiente
+import Pkg
+Pkg.activate("C:/Users/93dav/programacao_nao_linear")
+
+# Importando libs que serão utilizadas
+import Pkg; Pkg.add("Optim")
+import Pkg; Pkg.add("CUTEst")
+import Pkg; Pkg.add("NLPModels")
+import Pkg; Pkg.add("LinearAlgebra")
+import Pkg; Pkg.add("DataFrames")
+
+using Optim, CUTEst, NLPModels, LinearAlgebra, DataFrames
+
+# Métricas de desempenho
+mutable struct metrics
+    function_value::Float64
+    gradient_norm_value::Float64
+    function_count::Int
+    gradient_count::Int
+end
+
+# Criando DataFrame para armazenar os resultados
+results_df = DataFrame(
+    Problem = String[], 
+    f_Cauchy = Float64[], grad_Cauchy = Float64[], f_count_Cauchy = Int[], grad_count_Cauchy = Int[],
+    f_BFGS = Float64[], grad_BFGS = Float64[], f_count_BFGS = Int[], grad_count_BFGS = Int[],
+    f_Spectral = Float64[], grad_Spectral = Float64[], f_count_Spectral = Int[], grad_count_Spectral = Int[]
+)
+
+#================================================================================================================
+# Função
+    `Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)`
+
+# Objetivo
+    Aplicar o algoritmo do método do gradiente com busca clássica de Armijo
+
+# Saída
+    - Print das iterações com os valores da função e do gradiente
+    - Ajusta o valor da estrutura count para anotar:
+        1. Valor da função no ponto final
+        2. Norma do gradiente no ponto final
+        3. Quantidade de vezes que a função foi avaliada
+        4. Quantidade de vezes que o gradiente foi avaliado
+
+# Entradas
+    - `nlp`             : problema teste importado pela função CUTEstModel() 
+    - `x`               : x inicial da busca. Sugestão: puxar o que está na variável nlp.meta.x0
+    - `d`               : gradiente da função no ponto inicial. Sugestão: -grad(nlp,x). A variável d foi usada para economizar 1 cálulo do gradiente por iteração.
+    - `passo_inicial`   : passo inicial da busca de Armijo. Sugesão: 1, 0.5 ou 0.1
+    - `fator_reducao`   : fator de redução do passo a cada teste da Busca de Armijo. Número entre 0 e 1. Sugestão: 0.5
+    - `cont`            : estrutura que acumula as métricas do problema
+    - `criterio_parada` : a partir de qual valor da norma do gradiente o algoritmo pode parar
+=================================================================================================================#
+
+function BFGS(nlp, x, passo_inicial, fator_reducao, count, criterio_parada_grad, criterio_parada_i)
+    i=0
+    H = I(nlp.meta.nvar)
+
+    g = grad(nlp, x)
+    count.gradient_count += 1
+
+    d=-H*g
+
+    while (norm(g) > criterio_parada_grad) && (i < criterio_parada_i)
+    
+        # Definindo o gradiente
+        d=-H*g
+        count.gradient_count += 1
+
+        # Critérios iniciais da Busca de Armijo
+        α= passo_inicial
+        c= fator_reducao
+        
+        count.function_count += 2
+        # Busca de Armijo
+        while (obj(nlp, x+α*d) > obj(nlp, x)-c*α*d'*d)
+            count.function_count += 2
+            α = α*c
+        end
+    
+        # Atualização do ponto com a direção e o passo calculados
+        x1=x+α*d
+    
+        g1 = grad(nlp, x1)
+        count.gradient_count += 1
+
+        s=x1-x
+        y=g1-g
+
+        ρ=1/(y'*s)
+        V=I-ρ*(s*y')
+        H=V*H*V'+ρ*(s*s')
+
+        x=x1
+        g=g1
+
+        i=i+1
+        println("--------- Iteração: ",i," ---------")
+        println("f(x) = ",obj(nlp, x))
+        println("|grad_f(x)| = ", norm(d))
+    
+    end
+
+    # Atualiando as métricas
+    count.function_value = obj(nlp, x)
+    count.gradient_norm_value = norm(d)
+end
+
+
+tests = [
+    "ARGLINA",
+    "ARGLINB",
+    "BA-L1SPLS",
+    "BIGGS6",
+    "BROWNAL",
+    "COATING",
+    "FLETCHCR",
+    "GAUSS2LS",
+    "GENROSE",
+    "HAHN1LS",
+    "HEART6LS",
+    "HILBERTB",
+    "HYDCAR6LS",
+    "LANCZOS1LS",
+    "LANCZOS2LS",
+    "LRIJCNN1",
+    "LUKSAN12LS",
+    "LUKSAN16LS",
+    "OSBORNEA",
+    "PALMER1C",
+    "PALMER3C",
+    "PENALTY2",
+    "PENALTY3",
+    "QING",
+    "ROSENBR",
+    "STRTCHDV",
+    "TESTQUAD",
+    "THURBERLS",
+    "TRIGON1",
+    "TOINTGOR",
+]
+
+
+for test in tests
+    nlp = CUTEstModel(test; decode=true)
+    println(test," importado!")
+
+    # Inicializar as métricas com zeros
+    count = metrics(0,0,0,0)
+
+    println("Começando BFGS com ", test)
+    BFGS(nlp, nlp.meta.x0, 0.1, 0.5, count, 0.0001, 100)
+
+    # Armazenando métricas no DataFrame
+    println("Armazenando métricas")
+    push!(results_df, (
+        # Nome do problema
+        Problem = nlp.meta.name,
+
+        # Dados de Cauchy
+        f_Cauchy = 0,
+        grad_Cauchy = 0,
+        f_count_Cauchy = 0,
+        grad_count_Cauchy = 0,
+
+        # Dados da BFGS
+        f_BFGS = count.function_value,
+        grad_BFGS = count.gradient_norm_value,
+        f_count_BFGS = count.function_count,
+        grad_count_BFGS = count.gradient_count,
+
+        # Dados do Spectral
+        f_Spectral = 0,
+        grad_Spectral = 0,
+        f_count_Spectral = 0,
+        grad_count_Spectral = 0
+    ))
+
+    finalize(nlp)
+    println(test," finalizado!")
+end
+
+println(results_df)
