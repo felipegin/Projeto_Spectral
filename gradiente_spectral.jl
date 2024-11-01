@@ -22,12 +22,74 @@ end
 # Criando DataFrame para armazenar os resultados
 results_df = DataFrame(
     Problem = String[], 
-    f_Cauchy = Float64[], grad_Cauchy = Float64[], f_count_Cauchy = Int[], grad_count_Cauchy = Int[],
-    f_BFGS = Float64[], grad_BFGS = Float64[], f_count_BFGS = Int[], grad_count_BFGS = Int[],
-    f_Spectral = Float64[], grad_Spectral = Float64[], f_count_Spectral = Int[], grad_count_Spectral = Int[],
-    f_Spectral_armijo = Float64[], grad_Spectral_armijo = Float64[], f_count_Spectral_armijo = Int[], grad_count_Spectral_armijo = Int[],
-    f_Spectral_armijo2 = Float64[], grad_Spectral_armijo2 = Float64[], f_count_Spectral_armijo2 = Int[], grad_count_Spectral_armijo2 = Int[]
+    f_Cauchy = Union{Float64, Missing}[], grad_Cauchy = Union{Float64, Missing}[], 
+    f_count_Cauchy = Union{Int, Missing}[], grad_count_Cauchy = Union{Int, Missing}[],
+    f_BFGS = Union{Float64, Missing}[], grad_BFGS = Union{Float64, Missing}[], 
+    f_count_BFGS = Union{Int, Missing}[], grad_count_BFGS = Union{Int, Missing}[],
+    f_Spectral = Union{Float64, Missing}[], grad_Spectral = Union{Float64, Missing}[], 
+    f_count_Spectral = Union{Int, Missing}[], grad_count_Spectral = Union{Int, Missing}[],
+    f_Spectral2 = Union{Float64, Missing}[], grad_Spectral2 = Union{Float64, Missing}[], 
+    f_count_Spectral2 = Union{Int, Missing}[], grad_count_Spectral2 = Union{Int, Missing}[],
+    f_Spectral3 = Union{Float64, Missing}[], grad_Spectral3 = Union{Float64, Missing}[], 
+    f_count_Spectral3 = Union{Int, Missing}[], grad_count_Spectral_armijo3 = Union{Int, Missing}[]
 )
+
+
+function registro!(results_df, nlp, count::metrics, algoritmo::String)
+    # Obter o nome do problema atual
+    problem_name = nlp.meta.name
+
+    # Verificar se o DataFrame está vazio
+    if isempty(results_df)
+        # Se o DataFrame estiver vazio, cria uma nova linha diretamente
+        push!(results_df, (
+            Problem = problem_name,
+            f_Cauchy = missing, grad_Cauchy = missing, f_count_Cauchy = missing, grad_count_Cauchy = missing,
+            f_BFGS = missing, grad_BFGS = missing, f_count_BFGS = missing, grad_count_BFGS = missing,
+            f_Spectral = missing, grad_Spectral = missing, f_count_Spectral = missing, grad_count_Spectral = missing,
+            f_Spectral2 = missing, grad_Spectral2 = missing, f_count_Spectral2 = missing, grad_count_Spectral2 = missing,
+            f_Spectral3 = missing, grad_Spectral3 = missing, f_count_Spectral3 = missing, grad_count_Spectral_armijo3 = missing
+        ))
+        # Definir `row_index` como a última linha do DataFrame
+        row_index = nrow(results_df)
+    else
+        # Se o DataFrame não está vazio, buscar a linha correspondente
+        row_index = findfirst(row -> row[:Problem] == problem_name, eachrow(results_df))
+
+        # Se o problema não estiver no DataFrame, cria uma nova linha
+        if isnothing(row_index)
+            push!(results_df, (
+                Problem = problem_name,
+                f_Cauchy = missing, grad_Cauchy = missing, f_count_Cauchy = missing, grad_count_Cauchy = missing,
+                f_BFGS = missing, grad_BFGS = missing, f_count_BFGS = missing, grad_count_BFGS = missing,
+                f_Spectral = missing, grad_Spectral = missing, f_count_Spectral = missing, grad_count_Spectral = missing,
+                f_Spectral2 = missing, grad_Spectral2 = missing, f_count_Spectral2 = missing, grad_count_Spectral2 = missing,
+                f_Spectral3 = missing, grad_Spectral3 = missing, f_count_Spectral3 = missing, grad_count_Spectral_armijo3 = missing
+            ))
+            # Atualizar `row_index` para a última linha do DataFrame
+            row_index = nrow(results_df)
+        end
+    end
+
+    # Atualizar apenas as colunas específicas ao algoritmo atual
+    if algoritmo == "Cauchy"
+        results_df[row_index, [:f_Cauchy, :grad_Cauchy, :f_count_Cauchy, :grad_count_Cauchy]] = 
+            (count.function_value, count.gradient_norm_value, count.function_count, count.gradient_count)
+    elseif algoritmo == "BFGS"
+        results_df[row_index, [:f_BFGS, :grad_BFGS, :f_count_BFGS, :grad_count_BFGS]] = 
+            (count.function_value, count.gradient_norm_value, count.function_count, count.gradient_count)
+    elseif algoritmo == "Spectral"
+        results_df[row_index, [:f_Spectral, :grad_Spectral, :f_count_Spectral, :grad_count_Spectral]] = 
+            (count.function_value, count.gradient_norm_value, count.function_count, count.gradient_count)
+    elseif algoritmo == "Spectral_armijo"
+        results_df[row_index, [:f_Spectral2, :grad_Spectral2, :f_count_Spectral2, :grad_count_Spectral2]] = 
+            (count.function_value, count.gradient_norm_value, count.function_count, count.gradient_count)
+    elseif algoritmo == "Spectral_armijo2"
+        results_df[row_index, [:f_Spectral3, :grad_Spectral3, :f_count_Spectral3, :grad_count_Spectral_armijo3]] = 
+            (count.function_value, count.gradient_norm_value, count.function_count, count.gradient_count)
+    end
+end
+
 
 #================================================================================================================
 # Função
@@ -136,6 +198,9 @@ function Spectral(nlp, x0, busca, passo_inicial, fator_reducao, count, criterio_
 end
 
 
+
+
+
 tests = [
     "ARGLINA",
     "ARGLINB",
@@ -148,30 +213,42 @@ tests = [
     "GENROSE",
     "HAHN1LS",
     "HEART6LS",
-    "HILBERTB",
-    "HYDCAR6LS",
-    "LANCZOS1LS",
-    "LANCZOS2LS",
-    "LRIJCNN1",
-    "LUKSAN12LS",
-    "LUKSAN16LS",
-    "OSBORNEA",
-    "PALMER1C",
-    "PALMER3C",
-    "PENALTY2",
-    "PENALTY3",
-    "QING",
-    "ROSENBR",
-    "STRTCHDV",
-    "TESTQUAD",
-    "THURBERLS",
-    "TRIGON1",
-    "TOINTGOR"
+    "HILBERTB"
 ]
 
 for test in tests
     nlp = CUTEstModel(test; decode=true)
     println(test," importado!")
+
+    # ------------------------- Spectral -----------------------------
+    # Inicializar as métricas com zeros
+    count = metrics(0,0,0,0)
+
+    d = -grad(nlp,nlp.meta.x0)
+    count.gradient_count = 1
+
+    println("Começando Spectral com ", test)
+    Spectral(nlp, nlp.meta.x0, "", 1, 0.5, count, 0.01, 1000)
+
+    # Armazenando métricas no DataFrame
+    println("Armazenando métricas")
+    registro!(results_df,nlp,count,"Spectral")
+
+    # ------------------------- Spectral Armijo -----------------------------
+    # Inicializar as métricas com zeros
+    count = metrics(0,0,0,0)
+
+    d = -grad(nlp,nlp.meta.x0)
+    count.gradient_count = 1
+
+    println("Começando Spectral2 com ", test)
+    Spectral(nlp, nlp.meta.x0, "Armijo", 1, 0.5, count, 0.01, 1000)
+
+    # Armazenando métricas no DataFrame
+    println("Armazenando métricas")
+    registro!(results_df,nlp,count,"Spectral_armijo")
+
+    # ------------------------- Spectral Armijo 2 -----------------------------
 
     # Inicializar as métricas com zeros
     count = metrics(0,0,0,0)
@@ -179,33 +256,12 @@ for test in tests
     d = -grad(nlp,nlp.meta.x0)
     count.gradient_count = 1
 
-    println("Começando Cauchy com ", test)
+    println("Começando Spectral3 com ", test)
     Spectral(nlp, nlp.meta.x0, "Armijo2", 1, 0.5, count, 0.01, 1000)
 
     # Armazenando métricas no DataFrame
     println("Armazenando métricas")
-    push!(results_df, (
-        # Nome do problema
-        Problem = nlp.meta.name,
-
-        # Dados de Cauchy
-        f_Cauchy = 0,
-        grad_Cauchy = 0,
-        f_count_Cauchy = 0,
-        grad_count_Cauchy = 0,
-
-        # Dados da BFGS
-        f_BFGS = 0,
-        grad_BFGS = 0,
-        f_count_BFGS = 0,
-        grad_count_BFGS = 0,
-
-        # Dados do Spectral
-        f_Spectral = count.function_value,
-        grad_Spectral = count.gradient_norm_value,
-        f_count_Spectral = count.function_count,
-        grad_count_Spectral = count.gradient_count
-    ))
+    registro!(results_df,nlp,count,"Spectral_armijo2")
 
     finalize(nlp)
     println(test," finalizado!")
