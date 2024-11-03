@@ -41,7 +41,28 @@ results_df = DataFrame(
     Memoria = Union{Float64, Missing}[]
 )
 
+#================================================================================================================
+`registro!(results_df, nlp, count::metrics, algoritmo::String, iteracoes, fator_reducao, passo_inicial, parada_grad, parada_armijo, tempo, memoria)`
 
+# Objetivo
+    Registra os resultados de cada execução no DataFrame `results_df`.
+
+# Saída
+    - Armazena os dados da execução (função objetivo, gradiente, iterações, etc.) no DataFrame para análise posterior.
+
+# Entradas
+    - `results_df`       : DataFrame onde serão registrados os dados.
+    - `nlp`              : Objeto do problema de teste.
+    - `count`            : Estrutura com métricas do problema.
+    - `algoritmo`        : Nome do algoritmo utilizado.
+    - `iteracoes`        : Número de iterações realizadas.
+    - `fator_reducao`    : Fator de redução utilizado na busca de Armijo.
+    - `passo_inicial`    : Passo inicial para a busca de Armijo.
+    - `parada_grad`      : Critério de parada para a norma do gradiente.
+    - `parada_armijo`    : Critério de parada para a busca de Armijo.
+    - `tempo`            : Tempo de execução da função.
+    - `memoria`          : Memória alocada durante a execução.
+=================================================================================================================#
 function registro!(results_df, nlp, count::metrics, algoritmo::String, iteracoes, fator_reducao, passo_inicial, parada_grad, parada_armijo, tempo, memoria)
     # Obter o nome do problema atual
     problem_name = nlp.meta.name
@@ -67,9 +88,43 @@ function registro!(results_df, nlp, count::metrics, algoritmo::String, iteracoes
     ))
 end
 
+
+
 #================================================================================================================
-# Função
-    `Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)`
+`armijo_search(nlp, x, d, passo_inicial, fator_reducao, η, count)`
+
+# Objetivo
+    Realizar a busca de Armijo para definir o tamanho do passo `α`.
+
+# Saída
+    - Retorna o valor de `α`, tamanho do passo ajustado pela busca de Armijo.
+
+# Entradas
+    - `nlp`             : Problema de teste importado pela função `CUTEstModel()`.
+    - `x`               : Ponto atual da busca.
+    - `d`               : Direção de descida.
+    - `passo_inicial`   : Passo inicial da busca de Armijo.
+    - `fator_reducao`   : Fator de redução aplicado na busca de Armijo.
+    - `η`               : Parâmetro da condição de Armijo.
+    - `count`           : Estrutura para acumular métricas de desempenho.
+
+=================================================================================================================#
+function armijo_search(nlp, x, d, passo_inicial, fator_reducao, η, count)
+    α = passo_inicial
+    k = 0
+    count.function_count += 2
+    while (obj(nlp, x + α * d) > obj(nlp, x) - η * α * d' * d) && k < 50
+        count.function_count += 2
+        α *= fator_reducao
+        k += 1
+    end
+    return α
+end
+
+
+
+#================================================================================================================
+`Cauchy(nlp, x, d, passo_inicial, fator_reducao, cont, criterio_parada)`
 
 # Objetivo
     Aplicar o algoritmo do método do gradiente com busca clássica de Armijo
@@ -91,21 +146,6 @@ end
     - `cont`            : estrutura que acumula as métricas do problema
     - `criterio_parada` : a partir de qual valor da norma do gradiente o algoritmo pode parar
 =================================================================================================================#
-
-# Função de busca de Armijo
-function armijo_search(nlp, x, d, passo_inicial, fator_reducao, η, count)
-    α = passo_inicial
-    k = 0
-    count.function_count += 2
-    while (obj(nlp, x + α * d) > obj(nlp, x) - η * α * d' * d) && k < 50
-        count.function_count += 2
-        α *= fator_reducao
-        k += 1
-    end
-    return α
-end
-
-# Função Cauchy com uso da função armijo_search
 function Cauchy(nlp, x, d, passo_inicial, fator_reducao, η, count, criterio_parada_grad, criterio_parada_i)
     i = 0
     while (norm(d) > criterio_parada_grad) && (i < criterio_parada_i)
@@ -129,7 +169,29 @@ function Cauchy(nlp, x, d, passo_inicial, fator_reducao, η, count, criterio_par
     count.gradient_norm_value = norm(d)
 end
 
-# Função BFGS com uso da função armijo_search
+
+
+#================================================================================================================
+`BFGS(nlp, x, passo_inicial, fator_reducao, η, count, criterio_parada_grad, criterio_parada_i)`
+
+# Objetivo
+    Aplicar o método BFGS com busca de Armijo para calcular o mínimo da função.
+
+# Saída
+    - Print do valor da função e da norma do gradiente ao final.
+    - Atualiza `count` com métricas de desempenho.
+
+# Entradas
+    - `nlp`                    : Problema de teste importado pela função `CUTEstModel()`.
+    - `x`                      : Ponto inicial.
+    - `passo_inicial`          : Passo inicial para a busca de Armijo.
+    - `fator_reducao`          : Fator de redução aplicado na busca de Armijo.
+    - `η`                      : Parâmetro da condição de Armijo.
+    - `count`                  : Estrutura para acumular métricas.
+    - `criterio_parada_grad`   : Critério de parada para a norma do gradiente.
+    - `criterio_parada_i`      : Número máximo de iterações.
+
+=================================================================================================================#
 function BFGS(nlp, x, passo_inicial, fator_reducao, η, count, criterio_parada_grad, criterio_parada_i)
     i = 0
     H = I(nlp.meta.nvar)
@@ -181,7 +243,28 @@ function BFGS(nlp, x, passo_inicial, fator_reducao, η, count, criterio_parada_g
     count.gradient_norm_value = norm(d)
 end
 
-# Função Spectral com uso da função armijo_search
+
+#================================================================================================================
+`Spectral(nlp, x0, busca, passo_inicial, fator_reducao, η, count, criterio_parada_grad, criterio_parada_i)`
+
+# Objetivo
+    Aplicar o método Spectral com ou sem busca de Armijo para minimizar a função.
+
+# Saída
+    - Print do valor da função e da norma do gradiente ao final.
+    - Atualiza `count` com métricas de desempenho.
+
+# Entradas
+    - `nlp`                    : Problema de teste importado pela função `CUTEstModel()`.
+    - `x0`                     : Ponto inicial.
+    - `busca`                  : Tipo de busca ("", "Armijo" ou "Armijo2").
+    - `passo_inicial`          : Passo inicial para a busca de Armijo.
+    - `fator_reducao`          : Fator de redução aplicado na busca de Armijo.
+    - `η`                      : Parâmetro da condição de Armijo.
+    - `count`                  : Estrutura para acumular métricas.
+    - `criterio_parada_grad`   : Critério de parada para a norma do gradiente.
+    - `criterio_parada_i`      : Número máximo de iterações.
+=================================================================================================================#
 function Spectral(nlp, x0, busca, passo_inicial, fator_reducao, η, count, criterio_parada_grad, criterio_parada_i)
     i = 0
     g = grad(nlp, x0)
@@ -285,7 +368,7 @@ passo_inicial = 1.0
 fator_reducao = 0.5
 parada_grad = 0.0001
 parada_armijo = 0.0001
-criterio_parada_i = 20000
+criterio_parada_i = 1000
 
 
 for test in tests
@@ -295,7 +378,7 @@ for test in tests
     x0 = nlp.meta.x0
 
     # ------------------------- Cauchy -----------------------------
-#=
+
     count = metrics(0.0, 0.0, 0, 0, 0, 0.0)
     d = -grad(nlp, x0)
     count.gradient_count += 1
@@ -309,7 +392,7 @@ for test in tests
     println("Começando BFGS com ", test)
     memoria = @allocated  count.tempo = @elapsed BFGS(nlp, x0, passo_inicial, fator_reducao, parada_armijo, count, parada_grad, criterio_parada_i)
     registro!(results_df, nlp, count, "BFGS", count.iteracoes, fator_reducao, passo_inicial, parada_grad, parada_armijo, count.tempo, memoria)
-=#
+
     # ------------------------- Spectral -----------------------------
 
     count = metrics(0.0, 0.0, 0, 0, 0, 0.0)
@@ -336,8 +419,3 @@ end
 
 
 println(results_df)
-
-Pkg.add("CSV")
-using CSV
-
-CSV.write("C:/Users/93dav/OneDrive/Documentos/Felipe/resultados_projeto_espectral/results_Spectrals2.csv", results_df)
